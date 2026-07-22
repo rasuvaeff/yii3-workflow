@@ -29,7 +29,9 @@ deliberately leaves out — a transition history and replay protection.
   package records one row per committed transition through a `TransitionLog`
   seam you bind to your storage.
 - **Idempotency.** `applyOnce($subject, $transition, $key)` skips a transition
-  whose key is already in the log — the answer to a double-submitted form.
+  whose key is already in the log — the answer to a double-submitted form. Two
+  lines of defence: a pre-flight lookup, and the log's own uniqueness
+  constraint, which decides a race the lookup cannot.
 - **Eager validation.** Definitions are checked with Symfony's own validators
   when a workflow is built, so a transition that could never fire is an error,
   not a silent no-op.
@@ -149,7 +151,12 @@ tell the user why an action is unavailable.
 
 `TransitionLog` is deliberately **not** bound by this package — exactly like
 `yiisoft/cache` leaves `Psr\SimpleCache\CacheInterface` to a backend. Without a
-binding the workflows still run; they just record nothing.
+binding the workflows still run and record nothing; passing an idempotency key
+in that state is refused with a `LogicException` rather than silently doing
+nothing.
+
+Install [`rasuvaeff/yii3-workflow-db`](https://github.com/rasuvaeff/yii3-workflow-db)
+for a `yiisoft/db` implementation with the migration, or bind your own:
 
 ```php
 // config/common/di/workflow.php

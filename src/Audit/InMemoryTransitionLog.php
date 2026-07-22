@@ -18,6 +18,12 @@ final class InMemoryTransitionLog implements TransitionLog
     #[\Override]
     public function append(TransitionRecord $record): void
     {
+        if ($record->idempotencyKey !== null
+            && $this->hasIdempotencyKey($record->workflow, $record->subjectId, $record->idempotencyKey)
+        ) {
+            throw new DuplicateIdempotencyKey($record->workflow, $record->subjectId, $record->idempotencyKey);
+        }
+
         $this->records[] = $record;
     }
 

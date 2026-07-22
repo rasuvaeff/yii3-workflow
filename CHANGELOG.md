@@ -24,3 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `IdempotentWorkflow::applyOnce()` skips a transition whose idempotency key is
   already recorded for the subject.
 - `workflow:dump` console command rendering Mermaid, PlantUML or Graphviz.
+- Make replay protection enforceable: `TransitionLog::append()` must throw
+  `DuplicateIdempotencyKey` when the (workflow, subject, key) triple already
+  exists, `IdempotentWorkflow::applyOnce()` reports that as a replay, and
+  supplying a key without a bound log raises a `LogicException` instead of
+  silently doing nothing.

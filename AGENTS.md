@@ -15,7 +15,7 @@ application's PSR-14 dispatcher, a transition history, replay protection, and a
 Public API: `WorkflowRegistry`, `WorkflowFactory`, `IdempotentWorkflow`,
 `EnumMarkingStore`, `WorkflowEventDispatcher`, `SubjectIdentity`,
 `Audit\{TransitionLog, TransitionRecord, InMemoryTransitionLog, AuditListener,
-IdempotencyContext}`, `Command\WorkflowDumpCommand`.
+IdempotencyContext, DuplicateIdempotencyKey}`, `Command\WorkflowDumpCommand`.
 
 ## Golden rules
 
@@ -76,6 +76,13 @@ Or with Make: `make build`, `make cs-fix`, `make psalm`, `make test`,
 - The audit trail exists only because `symfony/workflow` stores the current
   marking and nothing else. `AuditListener` skips subjects without
   `SubjectIdentity` rather than inventing an id.
+- Idempotency has TWO layers: the pre-flight `hasIdempotencyKey()` lookup and
+  `append()` throwing `DuplicateIdempotencyKey` when a backend's unique
+  constraint fires; `applyOnce()` turns the latter into `false`. Never
+  "simplify" that catch away — the lookup alone is check-then-act and loses
+  races. A key without a bound log is a `LogicException`, not a silent pass.
+  The subject is already mutated when the constraint rejects the write, so the
+  documented recipe (wrap in a transaction) is part of the contract.
 - `IdempotencyContext` is request-scoped mutable state, deliberately: workflow
   events do not carry `apply()`'s `$context` in a form a listener can rely on
   across Symfony versions. In a long-running worker, keep one instance per job.

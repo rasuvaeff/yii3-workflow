@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Rasuvaeff\Yii3Workflow\Tests;
 
+use Rasuvaeff\Yii3Workflow\Audit\DuplicateIdempotencyKey;
 use Rasuvaeff\Yii3Workflow\Audit\InMemoryTransitionLog;
+use Rasuvaeff\Yii3Workflow\Audit\TransitionLog;
+use Rasuvaeff\Yii3Workflow\Audit\TransitionRecord;
 use Rasuvaeff\Yii3Workflow\IdempotentWorkflow;
 use Rasuvaeff\Yii3Workflow\Tests\Support\Clocks;
 use Rasuvaeff\Yii3Workflow\Tests\Support\Definitions;
@@ -89,15 +92,50 @@ final class IdempotentWorkflowTest
         $this->workflow->applyOnce(new \stdClass(), 'pay', 'req-1');
     }
 
-    public function worksWithoutALogAndWithoutAnIdempotencyContext(): void
+    public function aKeyWithoutALogIsRefusedInsteadOfSilentlyDoingNothing(): void
+    {
+        $bare = new IdempotentWorkflow($this->workflow->workflow());
+
+        // Without a log there is no replay protection at all; accepting the key
+        // would look safe and be anything but.
+        Expect::exception(\LogicException::class)
+            ->withMessageContaining('no TransitionLog is bound, so replay protection would silently do nothing');
+
+        $bare->applyOnce(new Order(), 'pay', 'req-1');
+    }
+
+    public function withoutAKeyALoglessWorkflowStillApplies(): void
     {
         $bare = new IdempotentWorkflow($this->workflow->workflow());
         $order = new Order();
 
-        Assert::true($bare->applyOnce($order, 'pay', 'req-1'));
-        // No log means no replay detection — documented, not silently "safe".
-        Assert::true($bare->applyOnce($order, 'ship', 'req-1'));
-        Assert::same($order->status(), OrderStatus::Shipped);
+        Assert::true($bare->applyOnce($order, 'pay'));
+        Assert::same($order->status(), OrderStatus::Paid);
+    }
+
+    public function aRaceLostAtTheStorageLayerIsReportedAsAReplay(): void
+    {
+        // Two requests pass the pre-flight lookup together; the log's uniqueness
+        // constraint decides, and the loser must not report success.
+        $racy = (new WorkflowFactory(
+            clock: Clocks::frozen(),
+            log: new RacyTransitionLog(),
+        ))->create('order', Definitions::order());
+
+        Assert::false($racy->applyOnce(new Order(), 'pay', 'req-1'));
+    }
+
+    public function aKeyedTransitionAppliesEvenWithoutAnIdempotencyContext(): void
+    {
+        $log = new InMemoryTransitionLog();
+        $workflow = new IdempotentWorkflow($this->workflow->workflow(), $log);
+        $order = new Order();
+
+        Assert::true($workflow->applyOnce($order, 'pay', 'req-1'));
+        Assert::same($order->status(), OrderStatus::Paid);
+
+        // The key is scoped to its subject, so another order may reuse it.
+        Assert::true($workflow->applyOnce(new Order('o-2'), 'pay', 'req-1'));
     }
 
     public function delegatesTheReadOnlyApi(): void
@@ -133,5 +171,32 @@ final class IdempotentWorkflowTest
     private function asIterator(iterable $transitions): \Iterator
     {
         return \is_array($transitions) ? new \ArrayIterator($transitions) : $transitions;
+    }
+}
+
+/** A log whose uniqueness constraint always fires, as a lost race would. */
+final class RacyTransitionLog implements TransitionLog
+{
+    #[\Override]
+    public function append(TransitionRecord $record): void
+    {
+        throw new DuplicateIdempotencyKey(
+            $record->workflow,
+            $record->subjectId,
+            (string) $record->idempotencyKey,
+        );
+    }
+
+    /** @return list<TransitionRecord> */
+    #[\Override]
+    public function forSubject(string $workflow, string $subjectId): array
+    {
+        return [];
+    }
+
+    #[\Override]
+    public function hasIdempotencyKey(string $workflow, string $subjectId, string $key): bool
+    {
+        return false;
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Rasuvaeff\Yii3Workflow;
 
+use Rasuvaeff\Yii3Workflow\Audit\DuplicateIdempotencyKey;
 use Rasuvaeff\Yii3Workflow\Audit\IdempotencyContext;
 use Rasuvaeff\Yii3Workflow\Audit\TransitionLog;
 use Symfony\Component\Workflow\Definition;
@@ -17,8 +18,18 @@ use Symfony\Component\Workflow\WorkflowInterface;
  *
  * Applying a transition with an idempotency key already recorded for this
  * subject is a no-op — the answer to a double-submitted form or a retried HTTP
- * call. The guarantee is only as strong as the {@see TransitionLog} behind it:
- * without a persistent log, replays are detected within one request only.
+ * call.
+ *
+ * Two lines of defence: a cheap pre-flight lookup, and the log's own uniqueness
+ * constraint, which decides the race when two concurrent requests pass the
+ * lookup together. The loser's `append()` throws
+ * {@see DuplicateIdempotencyKey} and `applyOnce()` reports `false`. The subject
+ * has already been mutated in memory by then — run the call inside a
+ * transaction, or discard the object, so a lost race cannot be persisted.
+ *
+ * The guarantee is only as strong as the {@see TransitionLog} behind it, so a
+ * key passed without a bound log is refused outright instead of silently doing
+ * nothing.
  *
  * This is a decorator, not a `WorkflowInterface` implementation: that interface
  * gained methods between Symfony 6.4 and 8.x, so implementing it would tie the
@@ -48,6 +59,13 @@ final readonly class IdempotentWorkflow
             return true;
         }
 
+        if ($this->log === null) {
+            throw new \LogicException(
+                'An idempotency key was supplied but no TransitionLog is bound, so replay protection '
+                . 'would silently do nothing. Bind a TransitionLog implementation or drop the key.',
+            );
+        }
+
         if (!$subject instanceof SubjectIdentity) {
             throw new \InvalidArgumentException(\sprintf(
                 'An idempotency key requires the subject to implement %s, %s given',
@@ -56,22 +74,29 @@ final readonly class IdempotentWorkflow
             ));
         }
 
-        if ($this->log?->hasIdempotencyKey($this->name(), $subject->workflowSubjectId(), $idempotencyKey) === true) {
+        if ($this->log->hasIdempotencyKey($this->name(), $subject->workflowSubjectId(), $idempotencyKey)) {
             return false;
         }
 
         $idempotency = $this->idempotency;
 
-        if ($idempotency === null) {
-            $this->apply($subject, $transitionName, $context);
+        try {
+            if ($idempotency === null) {
+                $this->apply($subject, $transitionName, $context);
 
-            return true;
+                return true;
+            }
+
+            $idempotency->during(
+                $idempotencyKey,
+                fn(): Marking => $this->apply($subject, $transitionName, $context),
+            );
+        } catch (DuplicateIdempotencyKey) {
+            // A concurrent request recorded the same key between our lookup and
+            // our write. The subject is dirty in memory by now; the caller's
+            // transaction is what keeps that from reaching storage.
+            return false;
         }
-
-        $idempotency->during(
-            $idempotencyKey,
-            fn(): Marking => $this->apply($subject, $transitionName, $context),
-        );
 
         return true;
     }

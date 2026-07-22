@@ -25,9 +25,13 @@ composer require rasuvaeff/yii3-workflow
   name), not once per `workflow.<name>.<event>` variant — narrow inside the
   listener with `getWorkflowName()` and `getTransition()`.
 - `TransitionLog` is intentionally not bound by the package: exactly one source
-  (the application or a backend package) may bind it. Without a binding the
-  workflows run but record nothing, and idempotency degrades to "no replay
-  detection".
+  (the application or a backend package, e.g. rasuvaeff/yii3-workflow-db) may
+  bind it. Without a binding the workflows run but record nothing, and passing
+  an idempotency key throws a LogicException instead of pretending to protect.
+- `TransitionLog::append()` MUST throw `DuplicateIdempotencyKey` when the
+  (workflow, subject, key) triple already exists — a storage backend should back
+  that with a unique constraint. `applyOnce()` catches it and returns false: the
+  subject is already mutated in memory, so wrap the call in a transaction.
 - A subject needs `SubjectIdentity` to be audited or to use an idempotency key.
 - In a `state_machine`, `from: [a, b]` is expanded into one transition per
   source; a transition with two targets is a configuration error (Symfony's
@@ -142,6 +146,7 @@ namespace Rasuvaeff\Yii3Workflow\Audit;
 
 interface TransitionLog
 {
+    /** @throws DuplicateIdempotencyKey when this (workflow, subject, key) is already stored */
     public function append(TransitionRecord $record): void;
     public function forSubject(string $workflow, string $subjectId): array;   // list<TransitionRecord>
     public function hasIdempotencyKey(string $workflow, string $subjectId, string $key): bool;
@@ -168,6 +173,16 @@ final readonly class AuditListener   // PSR-14 listener on CompletedEvent
 {
     public function __construct(TransitionLog $log, ClockInterface $clock, IdempotencyContext $idempotency);
     public function __invoke(object $event): void;
+}
+
+final class DuplicateIdempotencyKey extends \RuntimeException
+{
+    public function __construct(
+        public readonly string $workflow,
+        public readonly string $subjectId,
+        public readonly string $idempotencyKey,
+        ?\Throwable $previous = null,
+    );
 }
 
 final class IdempotencyContext

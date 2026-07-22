@@ -66,6 +66,10 @@
         "sort-packages": true
     },
     "extra": {
+        "branch-alias": {
+            "dev-main": "1.0.x-dev",
+            "dev-master": "1.0.x-dev"
+        },
         "config-plugin": {
             "di": "di.php",
             "params": "params.php"
