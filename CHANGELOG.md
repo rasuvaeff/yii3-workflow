@@ -1,0 +1,26 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## Unreleased
+
+- Initial package: Yii3 integration for `symfony/workflow`. `WorkflowRegistry`
+  builds workflows lazily from the `params.php` array shape (backed enums or
+  strings, `state_machine` or Petri-net `workflow`), validated with Symfony's own
+  definition validators, with multi-source state machine transitions expanded
+  into one transition per source.
+- `WorkflowEventDispatcher` bridges Symfony's name-based dispatch to the
+  application's PSR-14 dispatcher and delivers each event exactly once, so
+  guards and reactions are ordinary Yii3 listeners and the package depends on
+  the event-dispatcher contracts rather than an implementation.
+- `EnumMarkingStore` reads and writes a backed-enum status property of any
+  visibility, so aggregates need no public setter.
+- Transition history through the `TransitionLog` seam (`TransitionRecord`,
+  `AuditListener`, `InMemoryTransitionLog`); the seam is intentionally left
+  unbound so exactly one source binds a backend.
+- `IdempotentWorkflow::applyOnce()` skips a transition whose idempotency key is
+  already recorded for the subject.
+- `workflow:dump` console command rendering Mermaid, PlantUML or Graphviz.

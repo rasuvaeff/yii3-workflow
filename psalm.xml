@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<psalm
+    errorLevel="1"
+    findUnusedCode="false"
+    resolveFromConfigFile="true"
+>
+    <projectFiles>
+        <directory name="src"/>
+        <ignoreFiles>
+            <directory name="vendor"/>
+        </ignoreFiles>
+    </projectFiles>
+
+    <issueHandlers>
+        <!--
+            symfony/workflow ships no static types for Transition::getFroms()/
+            getTos(), so psalm sees `array<array-key, mixed>` at that boundary.
+            The values are filtered with is_string() before use; the suppression
+            is scoped to the single method that reads them.
+        -->
+        <MixedAssignment>
+            <errorLevel type="suppress">
+                <file name="src/Audit/AuditListener.php"/>
+            </errorLevel>
+        </MixedAssignment>
+    </issueHandlers>
+</psalm>

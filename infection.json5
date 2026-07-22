@@ -1,0 +1,36 @@
+{
+    "$schema": "vendor/infection/infection/resources/schema.json",
+    "source": {
+        "directories": ["src"]
+    },
+    "logs": {
+        "text": "php://stderr",
+        "summary": "build/infection-summary.log"
+    },
+    "testFramework": "testo",
+    "minMsi": 100,
+    "mutators": {
+        "@default": true,
+        // `(string) $enum->value` and `new Marking([$place => 1])`: the marking
+        // count of a single-state store is never read back, and a place name is
+        // already a string for every string-backed enum — the cast only keeps
+        // the type contract honest for int-backed ones, which symfony rejects
+        // downstream anyway.
+        "CastString": {
+            "ignore": [
+                "Rasuvaeff\\Yii3Workflow\\EnumMarkingStore::getMarking",
+                "Rasuvaeff\\Yii3Workflow\\WorkflowFactory::definition"
+            ]
+        },
+        "IncrementInteger": {
+            "ignore": ["Rasuvaeff\\Yii3Workflow\\EnumMarkingStore::getMarking"]
+        },
+        // `array_values()` over an already sequential array_map() result.
+        "UnwrapArrayValues": {
+            "ignore": [
+                "Rasuvaeff\\Yii3Workflow\\WorkflowFactory::places",
+                "Rasuvaeff\\Yii3Workflow\\WorkflowFactory::placeList"
+            ]
+        }
+    }
+}
