@@ -45,11 +45,14 @@ final readonly class EnumMarkingStore implements MarkingStoreInterface
 
         $value = $reflection->getValue($subject);
 
-        if (!$value instanceof \BackedEnum) {
+        // Any other type — including a different enum whose value happens to
+        // match a place name — is a wiring bug, not a marking.
+        if (!$value instanceof $this->enum) {
             throw new \LogicException(\sprintf(
-                'Property "%s" of %s must hold a backed enum, %s given',
+                'Property "%s" of %s must hold a backed enum %s, %s given',
                 $this->property,
                 $subject::class,
+                $this->enum,
                 \get_debug_type($value),
             ));
         }

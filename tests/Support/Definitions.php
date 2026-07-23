@@ -22,4 +22,19 @@ final readonly class Definitions
             ],
         ];
     }
+
+    /** A Petri-net workflow: `publish` needs both reviews at once. @return array<string, mixed> */
+    public static function document(): array
+    {
+        return [
+            'type' => 'workflow',
+            'initial' => 'draft',
+            'places' => ['draft', 'review_legal', 'review_style', 'published'],
+            'markingStore' => ['type' => 'method', 'property' => 'places'],
+            'transitions' => [
+                ['name' => 'submit', 'from' => 'draft', 'to' => ['review_legal', 'review_style']],
+                ['name' => 'publish', 'from' => ['review_legal', 'review_style'], 'to' => 'published'],
+            ],
+        ];
+    }
 }

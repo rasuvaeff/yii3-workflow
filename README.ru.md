@@ -119,6 +119,19 @@ final readonly class ShipOrderHandler
 | `enabledTransitions($subject)` | `iterable<Transition>` | Сейчас возможные переходы |
 | `name()` / `definition()` / `workflow()` | — | Имя, граф, обёрнутый `WorkflowInterface` |
 
+Ключ скоупится на *(workflow, subject)*, а не на переход: повторное
+использование ключа на том же субъекте с другим переходом считается повтором
+(`false`), поэтому ключи должны быть уникальны на операцию. Ключ, который
+обвязка не может обслужить — нет `TransitionLog`, нет `IdempotencyContext` или
+`AuditListener` так и не записал ключ, — `applyOnce()` отклоняет через
+`LogicException`, вместо того чтобы молча применить переход без защиты.
+
+С персистентным логом строка аудита пишется внутри `apply()`: выполняйте
+`applyOnce()` и свой `save()` в **одной транзакции БД**. Иначе упавший `save()`
+сжигает ключ — в логе переход записан, сущность не изменилась, и каждый повтор
+пропускается как replay. Рецепт — в
+[README yii3-workflow-db](https://github.com/rasuvaeff/yii3-workflow-db#транзакции).
+
 ### Guard'ы и реакции
 
 Каждое событие workflow доходит до PSR-14 диспетчера приложения ровно один раз —
@@ -182,6 +195,9 @@ return [
 ./yii workflow:dump order --format=puml # PlantUML
 ./yii workflow:dump order --format=dot  # Graphviz
 ```
+
+Вид диаграммы следует за настроенным `type`: `state_machine` рисуется прямыми
+рёбрами между местами, Petri-net `workflow` — с явными узлами переходов.
 
 ## Безопасность
 

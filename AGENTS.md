@@ -80,9 +80,21 @@ Or with Make: `make build`, `make cs-fix`, `make psalm`, `make test`,
   `append()` throwing `DuplicateIdempotencyKey` when a backend's unique
   constraint fires; `applyOnce()` turns the latter into `false`. Never
   "simplify" that catch away — the lookup alone is check-then-act and loses
-  races. A key without a bound log is a `LogicException`, not a silent pass.
-  The subject is already mutated when the constraint rejects the write, so the
-  documented recipe (wrap in a transaction) is part of the contract.
+  races. The subject is already mutated when the constraint rejects the write,
+  so the documented recipe (wrap in a transaction) is part of the contract.
+- `applyOnce()` refuses a key its wiring cannot honour with a `LogicException`,
+  never a silent pass: no bound `TransitionLog`, no `IdempotencyContext`, and —
+  verified with a post-apply `hasIdempotencyKey()` lookup — a workflow whose
+  dispatcher has no `AuditListener` sharing that log and context. The post-apply
+  check is what makes hand-assembled, half-wired decorators loud; do not remove
+  it to save a query.
+- An idempotency key is scoped to (workflow, subject), not to a transition:
+  the same key with a different transition is reported as a replay (`false`).
+- `EnumMarkingStore` rejects values that are not cases of the CONFIGURED enum
+  class — including a different enum whose value collides with a place name.
+- `workflow:dump` picks the diagram flavour from the built workflow
+  (`instanceof StateMachine`): state machines get direct edges, Petri nets get
+  explicit transition nodes. There is no separate `workflow-dot` format.
 - `IdempotencyContext` is request-scoped mutable state, deliberately: workflow
   events do not carry `apply()`'s `$context` in a form a listener can rely on
   across Symfony versions. In a long-running worker, keep one instance per job.

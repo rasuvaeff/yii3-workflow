@@ -67,7 +67,27 @@ final class EnumMarkingStoreTest
             }
         };
 
-        Expect::exception(\LogicException::class)->withMessageContaining('must hold a backed enum, string given');
+        Expect::exception(\LogicException::class)
+            ->withMessageContaining(\sprintf('must hold a backed enum %s, string given', OrderStatus::class));
+
+        $this->store()->getMarking($subject);
+    }
+
+    public function rejectsADifferentEnumWithACoincidingValue(): void
+    {
+        // OtherStatus::Pending shares the value 'pending' with
+        // OrderStatus::Pending; reading it silently would mask a wiring bug.
+        $subject = new class {
+            private OtherStatus $status = OtherStatus::Pending;
+
+            public function keep(): OtherStatus
+            {
+                return $this->status;
+            }
+        };
+
+        Expect::exception(\LogicException::class)
+            ->withMessageContaining(\sprintf('must hold a backed enum %s', OrderStatus::class));
 
         $this->store()->getMarking($subject);
     }
@@ -99,4 +119,10 @@ final class EnumMarkingStoreTest
     {
         return new EnumMarkingStore(OrderStatus::class);
     }
+}
+
+/** A foreign enum whose value collides with a place name of OrderStatus. */
+enum OtherStatus: string
+{
+    case Pending = 'pending';
 }

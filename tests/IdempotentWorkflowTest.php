@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Rasuvaeff\Yii3Workflow\Tests;
 
 use Rasuvaeff\Yii3Workflow\Audit\DuplicateIdempotencyKey;
+use Rasuvaeff\Yii3Workflow\Audit\IdempotencyContext;
 use Rasuvaeff\Yii3Workflow\Audit\InMemoryTransitionLog;
 use Rasuvaeff\Yii3Workflow\Audit\TransitionLog;
 use Rasuvaeff\Yii3Workflow\Audit\TransitionRecord;
@@ -125,17 +126,34 @@ final class IdempotentWorkflowTest
         Assert::false($racy->applyOnce(new Order(), 'pay', 'req-1'));
     }
 
-    public function aKeyedTransitionAppliesEvenWithoutAnIdempotencyContext(): void
+    public function aKeyWithoutAnIdempotencyContextIsRefused(): void
     {
-        $log = new InMemoryTransitionLog();
-        $workflow = new IdempotentWorkflow($this->workflow->workflow(), $log);
-        $order = new Order();
+        // Without a context the key can never reach the log, so replay
+        // protection would silently do nothing on every call.
+        $workflow = new IdempotentWorkflow($this->workflow->workflow(), new InMemoryTransitionLog());
 
-        Assert::true($workflow->applyOnce($order, 'pay', 'req-1'));
-        Assert::same($order->status(), OrderStatus::Paid);
+        Expect::exception(\LogicException::class)
+            ->withMessageContaining('pass the same IdempotencyContext instance the AuditListener uses');
 
-        // The key is scoped to its subject, so another order may reuse it.
-        Assert::true($workflow->applyOnce(new Order('o-2'), 'pay', 'req-1'));
+        $workflow->applyOnce(new Order(), 'pay', 'req-1');
+    }
+
+    public function anUnrecordedKeyIsDetectedInsteadOfSilentlyApplying(): void
+    {
+        // A log and a context are bound, but the wrapped workflow's own
+        // AuditListener writes to a DIFFERENT log: the key would never be
+        // recorded, and every "replay" would apply again. That wiring bug must
+        // be loud, not a permanent silent hole in the protection.
+        $workflow = new IdempotentWorkflow(
+            $this->workflow->workflow(),
+            new InMemoryTransitionLog(),
+            new IdempotencyContext(),
+        );
+
+        Expect::exception(\LogicException::class)
+            ->withMessageContaining('Build the workflow via WorkflowFactory so the wiring is consistent');
+
+        $workflow->applyOnce(new Order(), 'pay', 'req-1');
     }
 
     public function delegatesTheReadOnlyApi(): void

@@ -118,6 +118,20 @@ final readonly class ShipOrderHandler
 | `enabledTransitions($subject)` | `iterable<Transition>` | Currently possible transitions |
 | `name()` / `definition()` / `workflow()` | — | Name, graph, the wrapped `WorkflowInterface` |
 
+A key is scoped to *(workflow, subject)*, not to a transition: reusing a key on
+the same subject with a different transition is reported as a replay (`false`),
+so keys must be unique per operation. `applyOnce()` refuses a key its wiring
+cannot honour — no `TransitionLog`, no `IdempotencyContext`, or an
+`AuditListener` that never recorded the key — with a `LogicException` instead of
+silently applying without protection.
+
+With a persistent log the audit row is written inside `apply()`: run
+`applyOnce()` and your `save()` in **one database transaction**. Otherwise a
+failed save burns the key — the log says the transition happened, the entity
+never changed, and every retry is skipped as a replay. See the
+[yii3-workflow-db README](https://github.com/rasuvaeff/yii3-workflow-db#transactions)
+for the recipe.
+
 ### Guards and reactions
 
 Every workflow event reaches the application's PSR-14 dispatcher exactly once —
@@ -181,6 +195,10 @@ scripts.
 ./yii workflow:dump order --format=puml # PlantUML
 ./yii workflow:dump order --format=dot  # Graphviz
 ```
+
+The diagram flavour follows the configured `type`: a `state_machine` is drawn
+with direct edges between places, a Petri-net `workflow` with explicit
+transition nodes.
 
 ## Security
 

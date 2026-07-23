@@ -17,11 +17,15 @@ use Symfony\Component\Workflow\Dumper\MermaidDumper;
 use Symfony\Component\Workflow\Dumper\PlantUmlDumper;
 use Symfony\Component\Workflow\Dumper\StateMachineGraphvizDumper;
 use Symfony\Component\Workflow\Marking;
+use Symfony\Component\Workflow\StateMachine;
 
 /**
  * Prints a configured workflow as a diagram — the Yii3 counterpart of
  * Symfony's `workflow:dump`, so a graph can be pasted into a README or a pull
  * request instead of being read as a list of transitions.
+ *
+ * The diagram flavour follows the configured `type`: a `state_machine` is drawn
+ * with direct edges, a Petri-net `workflow` with explicit transition nodes.
  *
  * @api
  */
@@ -62,23 +66,28 @@ final class WorkflowDumpCommand extends Command
             return Command::FAILURE;
         }
 
-        $output->writeln($this->dumper($input->getOption('format'))->dump(
-            $this->registry->get($name)->definition(),
-            new Marking(),
-        ));
+        $workflow = $this->registry->get($name);
+
+        $output->writeln($this->dumper(
+            $input->getOption('format'),
+            stateMachine: $workflow->workflow() instanceof StateMachine,
+        )->dump($workflow->definition(), new Marking()));
 
         return Command::SUCCESS;
     }
 
-    private function dumper(mixed $format): DumperInterface
+    private function dumper(mixed $format, bool $stateMachine): DumperInterface
     {
         $name = \is_string($format) && $format !== '' ? $format : 'mermaid';
 
         return match ($name) {
-            'mermaid' => new MermaidDumper(MermaidDumper::TRANSITION_TYPE_STATEMACHINE),
-            'puml' => new PlantUmlDumper(PlantUmlDumper::STATEMACHINE_TRANSITION),
-            'dot' => new StateMachineGraphvizDumper(),
-            'workflow-dot' => new GraphvizDumper(),
+            'mermaid' => new MermaidDumper(
+                $stateMachine ? MermaidDumper::TRANSITION_TYPE_STATEMACHINE : MermaidDumper::TRANSITION_TYPE_WORKFLOW,
+            ),
+            'puml' => new PlantUmlDumper(
+                $stateMachine ? PlantUmlDumper::STATEMACHINE_TRANSITION : PlantUmlDumper::WORKFLOW_TRANSITION,
+            ),
+            'dot' => $stateMachine ? new StateMachineGraphvizDumper() : new GraphvizDumper(),
             default => throw new \InvalidArgumentException(\sprintf('Unknown format "%s"', $name)),
         };
     }

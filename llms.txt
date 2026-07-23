@@ -28,6 +28,13 @@ composer require rasuvaeff/yii3-workflow
   (the application or a backend package, e.g. rasuvaeff/yii3-workflow-db) may
   bind it. Without a binding the workflows run but record nothing, and passing
   an idempotency key throws a LogicException instead of pretending to protect.
+- `applyOnce()` refuses a key its wiring cannot honour with a LogicException:
+  no TransitionLog, no IdempotencyContext, or (detected after the transition)
+  no AuditListener recorded the key. Build workflows via WorkflowFactory so the
+  wiring is consistent.
+- A key is scoped to (workflow, subject), NOT to a transition: reusing a key on
+  the same subject with a different transition returns false (replay). Keys
+  must be unique per operation.
 - `TransitionLog::append()` MUST throw `DuplicateIdempotencyKey` when the
   (workflow, subject, key) triple already exists — a storage backend should back
   that with a unique constraint. `applyOnce()` catches it and returns false: the
@@ -38,7 +45,8 @@ composer require rasuvaeff/yii3-workflow
   `StateMachineValidator` runs when the workflow is built).
 - Places and endpoints accept backed enums or strings.
 - `EnumMarkingStore` reads and writes a private/protected enum property; use
-  `['type' => 'method']` for classic `getX()`/`setX()` subjects.
+  `['type' => 'method']` for classic `getX()`/`setX()` subjects. Reading rejects
+  any value that is not a case of the configured enum class.
 
 ## Configuration (params.php)
 
@@ -198,9 +206,11 @@ final class IdempotencyContext
 ./yii workflow:dump                       # list configured workflows
 ./yii workflow:dump order                 # mermaid (default)
 ./yii workflow:dump order --format=puml   # plantuml
-./yii workflow:dump order --format=dot    # graphviz (state machine)
-./yii workflow:dump order --format=workflow-dot
+./yii workflow:dump order --format=dot    # graphviz
 ```
+
+The diagram flavour follows the configured `type`: a `state_machine` is drawn
+with direct edges, a Petri-net `workflow` with explicit transition nodes.
 
 ## Minimal example
 

@@ -27,9 +27,18 @@ use Symfony\Component\Workflow\WorkflowInterface;
  * has already been mutated in memory by then — run the call inside a
  * transaction, or discard the object, so a lost race cannot be persisted.
  *
- * The guarantee is only as strong as the {@see TransitionLog} behind it, so a
- * key passed without a bound log is refused outright instead of silently doing
- * nothing.
+ * The guarantee is only as strong as the wiring behind it, so a key is refused
+ * outright instead of silently doing nothing when the wiring cannot support it:
+ * without a bound {@see TransitionLog}, without an {@see IdempotencyContext}
+ * (the key could never reach the log), and — detected after the fact — when the
+ * workflow's dispatcher has no {@see \Rasuvaeff\Yii3Workflow\Audit\AuditListener}
+ * sharing this log and context, so the transition completed but the key was
+ * never recorded. {@see WorkflowFactory} produces consistent wiring; assemble
+ * the pieces manually only if they share the same instances.
+ *
+ * A key is scoped to (workflow, subject), not to a transition: reusing a key on
+ * the same subject with a different transition is reported as a replay
+ * (`false`), so keys must be unique per operation.
  *
  * This is a decorator, not a `WorkflowInterface` implementation: that interface
  * gained methods between Symfony 6.4 and 8.x, so implementing it would tie the
@@ -66,6 +75,14 @@ final readonly class IdempotentWorkflow
             );
         }
 
+        if ($this->idempotency === null) {
+            throw new \LogicException(
+                'An idempotency key was supplied but no IdempotencyContext is bound, so the key could '
+                . 'never reach the transition log. Build the workflow via WorkflowFactory, or pass the '
+                . 'same IdempotencyContext instance the AuditListener uses.',
+            );
+        }
+
         if (!$subject instanceof SubjectIdentity) {
             throw new \InvalidArgumentException(\sprintf(
                 'An idempotency key requires the subject to implement %s, %s given',
@@ -78,16 +95,8 @@ final readonly class IdempotentWorkflow
             return false;
         }
 
-        $idempotency = $this->idempotency;
-
         try {
-            if ($idempotency === null) {
-                $this->apply($subject, $transitionName, $context);
-
-                return true;
-            }
-
-            $idempotency->during(
+            $this->idempotency->during(
                 $idempotencyKey,
                 fn(): Marking => $this->apply($subject, $transitionName, $context),
             );
@@ -96,6 +105,14 @@ final readonly class IdempotentWorkflow
             // our write. The subject is dirty in memory by now; the caller's
             // transaction is what keeps that from reaching storage.
             return false;
+        }
+
+        if (!$this->log->hasIdempotencyKey($this->name(), $subject->workflowSubjectId(), $idempotencyKey)) {
+            throw new \LogicException(
+                'The transition completed but its idempotency key was never recorded: no AuditListener '
+                . 'sharing this TransitionLog and IdempotencyContext is attached to the workflow. Build '
+                . 'the workflow via WorkflowFactory so the wiring is consistent.',
+            );
         }
 
         return true;

@@ -29,3 +29,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exists, `IdempotentWorkflow::applyOnce()` reports that as a replay, and
   supplying a key without a bound log raises a `LogicException` instead of
   silently doing nothing.
+- Make broken idempotency wiring loud: `applyOnce()` now also refuses a key
+  when no `IdempotencyContext` is bound, and verifies after the transition that
+  the key was actually recorded — a workflow without a matching `AuditListener`
+  raises a `LogicException` instead of silently applying without protection.
+- `EnumMarkingStore` rejects values of a different enum class than the
+  configured one, even when the backing value collides with a place name.
+- `workflow:dump` picks the diagram flavour from the workflow type: Petri-net
+  `workflow` definitions are rendered with explicit transition nodes in every
+  format; the separate `workflow-dot` format is gone.

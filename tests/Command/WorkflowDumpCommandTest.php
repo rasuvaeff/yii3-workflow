@@ -35,7 +35,22 @@ final class WorkflowDumpCommandTest
         yield 'mermaid' => ['mermaid', 'graph LR'];
         yield 'plantuml' => ['puml', '@startuml'];
         yield 'graphviz' => ['dot', 'digraph'];
-        yield 'petri net graphviz' => ['workflow-dot', 'digraph'];
+    }
+
+    #[DataProvider('petriNetFormatProvider')]
+    public function drawsAPetriNetWithExplicitTransitionNodes(string $format, string $needle): void
+    {
+        $tester = $this->tester();
+
+        Assert::same($tester->execute(['workflow' => 'document', '--format' => $format]), Command::SUCCESS);
+        Assert::string($tester->getDisplay())->contains($needle);
+    }
+
+    public static function petriNetFormatProvider(): iterable
+    {
+        yield 'mermaid transition nodes' => ['mermaid', 'transition0['];
+        yield 'plantuml agents' => ['puml', 'agent '];
+        yield 'graphviz transition nodes' => ['dot', 'transition_'];
     }
 
     public function defaultsToMermaid(): void
@@ -44,6 +59,16 @@ final class WorkflowDumpCommandTest
         $tester->execute(['workflow' => 'order']);
 
         Assert::string($tester->getDisplay())->contains('graph LR');
+    }
+
+    public function drawsAStateMachineWithDirectLabelledEdges(): void
+    {
+        // The state-machine flavour puts the transition name ON the edge; the
+        // Petri-net flavour would render a separate transition node instead.
+        $tester = $this->tester();
+        $tester->execute(['workflow' => 'order', '--format' => 'mermaid']);
+
+        Assert::string($tester->getDisplay())->contains('-->|"pay"|');
     }
 
     public function listsTheConfiguredWorkflowsWithoutAnArgument(): void
@@ -81,7 +106,7 @@ final class WorkflowDumpCommandTest
     private function tester(): CommandTester
     {
         return new CommandTester(new WorkflowDumpCommand(new WorkflowRegistry(
-            ['order' => Definitions::order()],
+            ['order' => Definitions::order(), 'document' => Definitions::document()],
             new WorkflowFactory(Clocks::frozen()),
         )));
     }
