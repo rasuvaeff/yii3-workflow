@@ -9,6 +9,7 @@ use Rasuvaeff\Yii3Workflow\Audit\IdempotencyContext;
 use Rasuvaeff\Yii3Workflow\Audit\InMemoryTransitionLog;
 use Rasuvaeff\Yii3Workflow\Audit\TransitionLog;
 use Rasuvaeff\Yii3Workflow\Audit\TransitionRecord;
+use Rasuvaeff\Yii3Workflow\Audit\TransitionReplayed;
 use Rasuvaeff\Yii3Workflow\IdempotentWorkflow;
 use Rasuvaeff\Yii3Workflow\Tests\Support\Clocks;
 use Rasuvaeff\Yii3Workflow\Tests\Support\Definitions;
@@ -22,6 +23,7 @@ use Testo\Codecov\Covers;
 use Testo\Expect;
 use Testo\Lifecycle\BeforeTest;
 use Testo\Test;
+use Yiisoft\Test\Support\EventDispatcher\SimpleEventDispatcher;
 
 #[Test]
 #[Covers(IdempotentWorkflow::class)]
@@ -156,6 +158,58 @@ final class IdempotentWorkflowTest
         $workflow->applyOnce(new Order(), 'pay', 'req-1');
     }
 
+    public function dispatchesAReplayEventOnAPreFlightHit(): void
+    {
+        $dispatcher = new SimpleEventDispatcher();
+        $workflow = (new WorkflowFactory(
+            clock: Clocks::frozen(),
+            dispatcher: $dispatcher,
+            log: new InMemoryTransitionLog(),
+        ))->create('order', Definitions::order());
+        $order = new Order('o-1');
+        $workflow->applyOnce($order, 'pay', 'req-1');
+
+        Assert::false($workflow->applyOnce($order, 'ship', 'req-1'));
+
+        $replays = $this->replays($dispatcher);
+        Assert::same(\count($replays), 1);
+        Assert::same($replays[0]->workflow, 'order');
+        Assert::same($replays[0]->subjectId, 'o-1');
+        Assert::same($replays[0]->transition, 'ship');
+        Assert::same($replays[0]->idempotencyKey, 'req-1');
+        Assert::false($replays[0]->storageDecided);
+    }
+
+    public function dispatchesAStorageDecidedReplayEventOnALostRace(): void
+    {
+        $dispatcher = new SimpleEventDispatcher();
+        $racy = (new WorkflowFactory(
+            clock: Clocks::frozen(),
+            dispatcher: $dispatcher,
+            log: new RacyTransitionLog(),
+        ))->create('order', Definitions::order());
+
+        Assert::false($racy->applyOnce(new Order(), 'pay', 'req-1'));
+
+        $replays = $this->replays($dispatcher);
+        Assert::same(\count($replays), 1);
+        Assert::true($replays[0]->storageDecided);
+    }
+
+    public function aSuccessfulApplyDispatchesNoReplayEvent(): void
+    {
+        $dispatcher = new SimpleEventDispatcher();
+        $workflow = (new WorkflowFactory(
+            clock: Clocks::frozen(),
+            dispatcher: $dispatcher,
+            log: new InMemoryTransitionLog(),
+        ))->create('order', Definitions::order());
+
+        Assert::true($workflow->applyOnce(new Order(), 'pay', 'req-1'));
+
+        Assert::same($this->replays($dispatcher), []);
+    }
+
     public function delegatesTheReadOnlyApi(): void
     {
         $order = new Order();
@@ -189,6 +243,15 @@ final class IdempotentWorkflowTest
     private function asIterator(iterable $transitions): \Iterator
     {
         return \is_array($transitions) ? new \ArrayIterator($transitions) : $transitions;
+    }
+
+    /** @return list<TransitionReplayed> */
+    private function replays(SimpleEventDispatcher $dispatcher): array
+    {
+        return \array_values(\array_filter(
+            $dispatcher->getEvents(),
+            static fn(object $event): bool => $event instanceof TransitionReplayed,
+        ));
     }
 }
 

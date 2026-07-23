@@ -14,8 +14,9 @@ application's PSR-14 dispatcher, a transition history, replay protection, and a
 
 Public API: `WorkflowRegistry`, `WorkflowFactory`, `IdempotentWorkflow`,
 `EnumMarkingStore`, `WorkflowEventDispatcher`, `SubjectIdentity`,
-`Audit\{TransitionLog, TransitionRecord, InMemoryTransitionLog, AuditListener,
-IdempotencyContext, DuplicateIdempotencyKey}`, `Command\WorkflowDumpCommand`.
+`TransitionGuard`, `Audit\{TransitionLog, TransitionRecord,
+InMemoryTransitionLog, AuditListener, IdempotencyContext,
+DuplicateIdempotencyKey, TransitionReplayed}`, `Command\WorkflowDumpCommand`.
 
 ## Golden rules
 
@@ -90,6 +91,17 @@ Or with Make: `make build`, `make cs-fix`, `make psalm`, `make test`,
   it to save a query.
 - An idempotency key is scoped to (workflow, subject), not to a transition:
   the same key with a different transition is reported as a replay (`false`).
+- Every skipped replay dispatches `Audit\TransitionReplayed` to the app's
+  PSR-14 dispatcher (when bound); `storageDecided` distinguishes the pre-flight
+  hit from a race the unique constraint decided. Keep the dispatch on BOTH
+  `return false` paths.
+- Guards may extend `TransitionGuard` (workflow/transition filtering in the
+  base, `__invoke` is final); a bare PSR-14 listener stays supported — the base
+  class is sugar, not a contract.
+- Definition metadata (`metadata`, `placesMetadata`, per-transition `metadata`)
+  lands in an `InMemoryMetadataStore`; state-machine expansion attaches the
+  transition metadata to EVERY expanded copy, and `placesMetadata` keys are
+  validated against the place list.
 - `EnumMarkingStore` rejects values that are not cases of the CONFIGURED enum
   class — including a different enum whose value collides with a place name.
 - `workflow:dump` picks the diagram flavour from the built workflow

@@ -209,6 +209,69 @@ final class WorkflowFactoryTest
         Assert::same($this->factory()->create('order', $definition)->name(), 'order');
     }
 
+    public function exposesWorkflowAndPlaceMetadata(): void
+    {
+        $definition = Definitions::order();
+        $definition['metadata'] = ['title' => 'Order flow', 'owner' => 'sales'];
+        $definition['placesMetadata'] = [
+            'paid' => ['bg_color' => 'green'],
+            'shipped' => ['bg_color' => 'blue'],
+        ];
+
+        $store = $this->factory()->create('order', $definition)->definition()->getMetadataStore();
+
+        Assert::same($store->getWorkflowMetadata(), ['title' => 'Order flow', 'owner' => 'sales']);
+        Assert::same($store->getPlaceMetadata('paid'), ['bg_color' => 'green']);
+        Assert::same($store->getPlaceMetadata('shipped'), ['bg_color' => 'blue']);
+        Assert::same($store->getPlaceMetadata('pending'), []);
+    }
+
+    public function attachesTransitionMetadataToEveryExpandedCopy(): void
+    {
+        $definition = Definitions::order();
+        $definition['transitions'] = [
+            ['name' => 'pay', 'from' => 'pending', 'to' => 'paid'],
+            [
+                'name' => 'cancel',
+                'from' => ['pending', 'paid'],
+                'to' => 'cancelled',
+                'metadata' => ['label' => 'Cancel the order'],
+            ],
+        ];
+
+        $graph = $this->factory()->create('order', $definition)->definition();
+        $store = $graph->getMetadataStore();
+        $byName = [];
+
+        foreach ($graph->getTransitions() as $transition) {
+            $byName[$transition->getName() . ':' . \implode('|', $transition->getFroms())]
+                = $store->getTransitionMetadata($transition);
+        }
+
+        Assert::same($byName, [
+            'pay:pending' => [],
+            'cancel:pending' => ['label' => 'Cancel the order'],
+            'cancel:paid' => ['label' => 'Cancel the order'],
+        ]);
+    }
+
+    public function exposesTransitionMetadataInAPetriNetToo(): void
+    {
+        $definition = Definitions::order();
+        $definition['type'] = 'workflow';
+        $definition['markingStore'] = new MethodMarkingStore(true, 'marking');
+        $definition['transitions'] = [
+            ['name' => 'pay', 'from' => 'pending', 'to' => 'paid', 'metadata' => ['label' => 'Pay']],
+        ];
+
+        $graph = $this->factory()->create('order', $definition)->definition();
+
+        Assert::same(
+            $graph->getMetadataStore()->getTransitionMetadata($graph->getTransitions()[0]),
+            ['label' => 'Pay'],
+        );
+    }
+
     public function acceptsReadyMadeTransitions(): void
     {
         $definition = Definitions::order();
@@ -266,6 +329,23 @@ final class WorkflowFactoryTest
         yield 'marking store with an empty property' => [
             ['markingStore' => ['type' => 'method', 'property' => '']] + $base,
             '"property" must be a non-empty string',
+        ];
+        yield 'metadata not an array' => [['metadata' => 'title'] + $base, '"metadata" must be an array'];
+        yield 'metadata with non-string keys' => [
+            ['metadata' => ['a', 'b']] + $base,
+            '"metadata" keys must be strings',
+        ];
+        yield 'placesMetadata not an array' => [
+            ['placesMetadata' => 'paid'] + $base,
+            '"placesMetadata" must be an array keyed by place name',
+        ];
+        yield 'placesMetadata for an unknown place' => [
+            ['placesMetadata' => ['refunded' => ['bg_color' => 'red']]] + $base,
+            'placesMetadata refers to unknown place "refunded"',
+        ];
+        yield 'transition metadata not an array' => [
+            ['transitions' => [['name' => 'pay', 'from' => 'pending', 'to' => 'paid', 'metadata' => 'x']]] + $base,
+            'metadata of transition "pay" must be an array',
         ];
     }
 

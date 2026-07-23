@@ -38,3 +38,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `workflow:dump` picks the diagram flavour from the workflow type: Petri-net
   `workflow` definitions are rendered with explicit transition nodes in every
   format; the separate `workflow-dot` format is gone.
+- `TransitionGuard` base class for guard listeners: the workflow/transition
+  filtering every bare PSR-14 guard had to repeat is done by the base,
+  subclasses implement only the check.
+- Every skipped replay is dispatched to the application's PSR-14 dispatcher as
+  `Audit\TransitionReplayed`, with a flag telling whether the pre-flight lookup
+  or the storage constraint decided.
+- Declarative metadata: `metadata` (workflow-level), `placesMetadata` (keyed by
+  place name, unknown places rejected) and a per-transition `metadata` key land
+  in the definition's metadata store; state-machine expansion attaches the
+  transition metadata to every expanded copy.

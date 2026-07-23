@@ -12,6 +12,7 @@ use Rasuvaeff\Yii3Workflow\Audit\TransitionLog;
 use Symfony\Component\Workflow\Definition;
 use Symfony\Component\Workflow\MarkingStore\MarkingStoreInterface;
 use Symfony\Component\Workflow\MarkingStore\MethodMarkingStore;
+use Symfony\Component\Workflow\Metadata\InMemoryMetadataStore;
 use Symfony\Component\Workflow\StateMachine;
 use Symfony\Component\Workflow\Transition;
 use Symfony\Component\Workflow\Validator\StateMachineValidator;
@@ -36,6 +37,10 @@ use Symfony\Component\Workflow\Workflow;
  * Guards and other reactions are NOT part of the definition: they are plain
  * PSR-14 listeners on the workflow event classes, registered wherever the
  * application registers its listeners.
+ *
+ * Metadata is declarative too: `metadata` (workflow-level), `placesMetadata`
+ * (keyed by place name) and a `metadata` key on each transition end up in the
+ * definition's metadata store, readable by guards and rendered by dumpers.
  *
  * @api
  */
@@ -81,7 +86,7 @@ final readonly class WorkflowFactory
             $workflow = new StateMachine($graph, $store, $dispatcher, $name);
         }
 
-        return new IdempotentWorkflow($workflow, $this->log, $idempotency);
+        return new IdempotentWorkflow($workflow, $this->log, $idempotency, $this->dispatcher);
     }
 
     /**
@@ -119,7 +124,19 @@ final readonly class WorkflowFactory
             throw new \InvalidArgumentException(\sprintf('Workflow "%s": "initial" must be a place name', $name));
         }
 
-        return new Definition($places, $this->transitions($name, $definition, $type), [$initial]);
+        /** @var \SplObjectStorage<Transition, array<array-key, mixed>> $transitionsMetadata */
+        $transitionsMetadata = new \SplObjectStorage();
+
+        return new Definition(
+            $places,
+            $this->transitions($name, $definition, $type, $transitionsMetadata),
+            [$initial],
+            new InMemoryMetadataStore(
+                workflowMetadata: $this->metadata($name, $definition['metadata'] ?? [], '"metadata"'),
+                placesMetadata: $this->placesMetadata($name, $definition, $places),
+                transitionsMetadata: $transitionsMetadata,
+            ),
+        );
     }
 
     /**
@@ -143,10 +160,11 @@ final readonly class WorkflowFactory
 
     /**
      * @param array<string, mixed> $definition
+     * @param \SplObjectStorage<Transition, array<array-key, mixed>> $metadata
      *
      * @return list<Transition>
      */
-    private function transitions(string $name, array $definition, string $type): array
+    private function transitions(string $name, array $definition, string $type, \SplObjectStorage $metadata): array
     {
         $transitions = $definition['transitions'] ?? null;
 
@@ -181,22 +199,92 @@ final readonly class WorkflowFactory
 
             $from = $this->placeList($name, $transition['from'] ?? null, 'from');
             $to = $this->placeList($name, $transition['to'] ?? null, 'to');
+            $transitionMetadata = $this->metadata(
+                $name,
+                $transition['metadata'] ?? [],
+                \sprintf('metadata of transition "%s"', $transitionName),
+            );
 
             if ($type === self::TYPE_WORKFLOW) {
-                $list[] = new Transition($transitionName, $from, $to);
+                $list[] = $built = new Transition($transitionName, $from, $to);
+
+                if ($transitionMetadata !== []) {
+                    $metadata[$built] = $transitionMetadata;
+                }
 
                 continue;
             }
 
             // A state machine transition carries exactly one source, so
             // `from: [pending, paid]` expands into one transition per source —
-            // the same normalisation Symfony's YAML config performs.
+            // the same normalisation Symfony's YAML config performs. The
+            // metadata is attached to every expanded copy.
             foreach ($from as $source) {
-                $list[] = new Transition($transitionName, $source, $to);
+                $list[] = $built = new Transition($transitionName, $source, $to);
+
+                if ($transitionMetadata !== []) {
+                    $metadata[$built] = $transitionMetadata;
+                }
             }
         }
 
         return $list;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function metadata(string $workflow, mixed $metadata, string $context): array
+    {
+        if (!\is_array($metadata)) {
+            throw new \InvalidArgumentException(
+                \sprintf('Workflow "%s": %s must be an array', $workflow, $context),
+            );
+        }
+
+        foreach (\array_keys($metadata) as $key) {
+            if (!\is_string($key)) {
+                throw new \InvalidArgumentException(
+                    \sprintf('Workflow "%s": %s keys must be strings', $workflow, $context),
+                );
+            }
+        }
+
+        /** @var array<string, mixed> $metadata */
+        return $metadata;
+    }
+
+    /**
+     * @param array<string, mixed> $definition
+     * @param list<string> $places
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function placesMetadata(string $name, array $definition, array $places): array
+    {
+        $config = $definition['placesMetadata'] ?? [];
+
+        if (!\is_array($config)) {
+            throw new \InvalidArgumentException(
+                \sprintf('Workflow "%s": "placesMetadata" must be an array keyed by place name', $name),
+            );
+        }
+
+        $result = [];
+
+        foreach (\array_keys($config) as $place) {
+            // Keys are place NAMES (strings): a typo here would otherwise
+            // silently produce metadata nothing ever reads.
+            if (!\is_string($place) || !\in_array($place, $places, true)) {
+                throw new \InvalidArgumentException(
+                    \sprintf('Workflow "%s": placesMetadata refers to unknown place "%s"', $name, (string) $place),
+                );
+            }
+
+            $result[$place] = $this->metadata($name, $config[$place], \sprintf('metadata of place "%s"', $place));
+        }
+
+        return $result;
     }
 
     /**

@@ -87,6 +87,24 @@ Places and transition endpoints accept backed enums or plain strings. In a state
 machine a transition with several sources is expanded into one transition per
 source — the same normalisation Symfony's YAML config performs.
 
+Metadata is declarative too — it lands in the definition's metadata store,
+readable by guards (`getMetadataStore()`) and rendered by the dumpers:
+
+```php
+'order' => [
+    // ...
+    'metadata' => ['title' => 'Order flow'],
+    'placesMetadata' => ['paid' => ['bg_color' => 'LightBlue']],   // keyed by place NAME
+    'transitions' => [
+        ['name' => 'ship', 'from' => OrderStatus::Paid, 'to' => OrderStatus::Shipped,
+         'metadata' => ['label' => 'Ship the order']],
+    ],
+],
+```
+
+A `placesMetadata` key that names an unknown place is an error, not silently
+dead configuration.
+
 ## Usage
 
 ```php
@@ -130,32 +148,50 @@ With a persistent log the audit row is written inside `apply()`: run
 failed save burns the key — the log says the transition happened, the entity
 never changed, and every retry is skipped as a replay. See the
 [yii3-workflow-db README](https://github.com/rasuvaeff/yii3-workflow-db#transactions)
-for the recipe.
+for the recipe — that package also ships a `WorkflowTransaction` helper that
+makes it a single call.
+
+Every skipped replay is also dispatched to the application's PSR-14 dispatcher
+as an `Audit\TransitionReplayed` event (workflow, subject id, transition, key,
+and whether the pre-flight lookup or the storage constraint decided), so
+replays can be counted and logged instead of disappearing into a `false`.
 
 ### Guards and reactions
 
 Every workflow event reaches the application's PSR-14 dispatcher exactly once —
 under the generic name, not once per `workflow.<name>.<event>` variant — so a
-class-based listener is not called three times:
+class-based listener is not called three times. Guard listeners therefore run
+for every workflow of the application; extend `TransitionGuard` and the
+"is this my workflow, is this my transition" filtering is done for you:
 
 ```php
+use Rasuvaeff\Yii3Workflow\TransitionGuard;
 use Symfony\Component\Workflow\Event\GuardEvent;
 use Symfony\Component\Workflow\TransitionBlocker;
 
-final class ShipOnlyWhenPaid
+final class ShipOnlyWhenPaid extends TransitionGuard
 {
-    public function __invoke(GuardEvent $event): void
+    protected function workflow(): string
     {
-        if ($event->getWorkflowName() !== 'order' || $event->getTransition()?->getName() !== 'ship') {
-            return;
-        }
+        return 'order';
+    }
 
+    protected function transitions(): array
+    {
+        return ['ship'];   // empty array = every transition of the workflow
+    }
+
+    protected function guard(GuardEvent $event): void
+    {
         if (!$event->getSubject()->isPaid()) {
             $event->addTransitionBlocker(new TransitionBlocker('Payment is not captured', 'order.unpaid'));
         }
     }
 }
 ```
+
+A plain PSR-14 listener on the event class still works — the base class only
+removes the filtering ritual.
 
 Register it like any other Yii3 listener (`config/common/events-web.php`).
 The blocker's message and code come back through `blockers()`, so an API can

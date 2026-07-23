@@ -88,6 +88,24 @@ return [
 с несколькими источниками разворачивается в отдельный переход на каждый источник —
 ровно так же нормализует YAML-конфигурацию Symfony.
 
+Metadata тоже декларативна — она попадает в metadata store определения, читается
+guard'ами (`getMetadataStore()`) и рендерится дамперами:
+
+```php
+'order' => [
+    // ...
+    'metadata' => ['title' => 'Order flow'],
+    'placesMetadata' => ['paid' => ['bg_color' => 'LightBlue']],   // ключ — ИМЯ места
+    'transitions' => [
+        ['name' => 'ship', 'from' => OrderStatus::Paid, 'to' => OrderStatus::Shipped,
+         'metadata' => ['label' => 'Ship the order']],
+    ],
+],
+```
+
+Ключ `placesMetadata` с неизвестным местом — ошибка, а не молча мёртвая
+конфигурация.
+
 ## Использование
 
 ```php
@@ -130,32 +148,50 @@ final readonly class ShipOrderHandler
 `applyOnce()` и свой `save()` в **одной транзакции БД**. Иначе упавший `save()`
 сжигает ключ — в логе переход записан, сущность не изменилась, и каждый повтор
 пропускается как replay. Рецепт — в
-[README yii3-workflow-db](https://github.com/rasuvaeff/yii3-workflow-db#транзакции).
+[README yii3-workflow-db](https://github.com/rasuvaeff/yii3-workflow-db#транзакции);
+там же есть хелпер `WorkflowTransaction`, сводящий рецепт к одному вызову.
+
+Каждый пропущенный повтор также диспатчится в PSR-14 диспетчер приложения как
+событие `Audit\TransitionReplayed` (workflow, id субъекта, переход, ключ и кто
+решил — pre-flight проверка или ограничение хранилища), так что повторы можно
+считать и логировать, а не терять в `false`.
 
 ### Guard'ы и реакции
 
 Каждое событие workflow доходит до PSR-14 диспетчера приложения ровно один раз —
 под общим именем, а не по разу на каждый вариант `workflow.<name>.<event>`, —
-поэтому слушатель по классу события не вызывается трижды:
+поэтому слушатель по классу события не вызывается трижды. Guard-слушатели при
+этом вызываются для каждого workflow приложения; наследуйте `TransitionGuard`,
+и фильтрация «мой ли это workflow, мой ли переход» уже сделана:
 
 ```php
+use Rasuvaeff\Yii3Workflow\TransitionGuard;
 use Symfony\Component\Workflow\Event\GuardEvent;
 use Symfony\Component\Workflow\TransitionBlocker;
 
-final class ShipOnlyWhenPaid
+final class ShipOnlyWhenPaid extends TransitionGuard
 {
-    public function __invoke(GuardEvent $event): void
+    protected function workflow(): string
     {
-        if ($event->getWorkflowName() !== 'order' || $event->getTransition()?->getName() !== 'ship') {
-            return;
-        }
+        return 'order';
+    }
 
+    protected function transitions(): array
+    {
+        return ['ship'];   // пустой массив = все переходы workflow
+    }
+
+    protected function guard(GuardEvent $event): void
+    {
         if (!$event->getSubject()->isPaid()) {
             $event->addTransitionBlocker(new TransitionBlocker('Payment is not captured', 'order.unpaid'));
         }
     }
 }
 ```
+
+Обычный PSR-14 слушатель на классе события по-прежнему работает — базовый класс
+лишь убирает ритуал фильтрации.
 
 Регистрируется как любой другой слушатель Yii3 (`config/common/events-web.php`).
 Сообщение и код блокировки возвращаются через `blockers()`, поэтому API может

@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Rasuvaeff\Yii3Workflow;
 
+use Psr\EventDispatcher\EventDispatcherInterface;
 use Rasuvaeff\Yii3Workflow\Audit\DuplicateIdempotencyKey;
 use Rasuvaeff\Yii3Workflow\Audit\IdempotencyContext;
 use Rasuvaeff\Yii3Workflow\Audit\TransitionLog;
+use Rasuvaeff\Yii3Workflow\Audit\TransitionReplayed;
 use Symfony\Component\Workflow\Definition;
 use Symfony\Component\Workflow\Marking;
 use Symfony\Component\Workflow\Transition;
@@ -40,6 +42,10 @@ use Symfony\Component\Workflow\WorkflowInterface;
  * the same subject with a different transition is reported as a replay
  * (`false`), so keys must be unique per operation.
  *
+ * Every skipped replay is also dispatched as a {@see TransitionReplayed} event
+ * when a PSR-14 dispatcher is bound, so replays can be counted and logged
+ * instead of disappearing into a `false` return value.
+ *
  * This is a decorator, not a `WorkflowInterface` implementation: that interface
  * gained methods between Symfony 6.4 and 8.x, so implementing it would tie the
  * package to one of them. Use {@see workflow()} where a raw `WorkflowInterface`
@@ -53,6 +59,7 @@ final readonly class IdempotentWorkflow
         private WorkflowInterface $workflow,
         private ?TransitionLog $log = null,
         private ?IdempotencyContext $idempotency = null,
+        private ?EventDispatcherInterface $dispatcher = null,
     ) {}
 
     /**
@@ -92,6 +99,8 @@ final readonly class IdempotentWorkflow
         }
 
         if ($this->log->hasIdempotencyKey($this->name(), $subject->workflowSubjectId(), $idempotencyKey)) {
+            $this->replayed($subject, $transitionName, $idempotencyKey, storageDecided: false);
+
             return false;
         }
 
@@ -104,6 +113,8 @@ final readonly class IdempotentWorkflow
             // A concurrent request recorded the same key between our lookup and
             // our write. The subject is dirty in memory by now; the caller's
             // transaction is what keeps that from reaching storage.
+            $this->replayed($subject, $transitionName, $idempotencyKey, storageDecided: true);
+
             return false;
         }
 
@@ -155,5 +166,16 @@ final readonly class IdempotentWorkflow
     public function workflow(): WorkflowInterface
     {
         return $this->workflow;
+    }
+
+    private function replayed(SubjectIdentity $subject, string $transition, string $key, bool $storageDecided): void
+    {
+        $this->dispatcher?->dispatch(new TransitionReplayed(
+            workflow: $this->name(),
+            subjectId: $subject->workflowSubjectId(),
+            transition: $transition,
+            idempotencyKey: $key,
+            storageDecided: $storageDecided,
+        ));
     }
 }

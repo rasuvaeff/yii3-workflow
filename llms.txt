@@ -64,8 +64,12 @@ composer require rasuvaeff/yii3-workflow
             ],
             'transitions' => [
                 ['name' => 'pay', 'from' => OrderStatus::Pending, 'to' => OrderStatus::Paid],
-                ['name' => 'cancel', 'from' => [OrderStatus::Pending, OrderStatus::Paid], 'to' => OrderStatus::Cancelled],
+                ['name' => 'cancel', 'from' => [OrderStatus::Pending, OrderStatus::Paid], 'to' => OrderStatus::Cancelled,
+                 'metadata' => ['label' => 'Cancel the order']],   // optional, per transition
             ],
+            'metadata' => ['title' => 'Order flow'],               // optional, workflow-level
+            'placesMetadata' => ['paid' => ['bg_color' => 'x']],   // optional, keyed by place NAME (string);
+                                                                   // unknown place = error
         ],
     ],
 ],
@@ -94,6 +98,7 @@ final readonly class IdempotentWorkflow
         WorkflowInterface $workflow,
         ?TransitionLog $log = null,
         ?IdempotencyContext $idempotency = null,
+        ?PsrEventDispatcherInterface $dispatcher = null,   // receives TransitionReplayed
     );
 
     /** @return bool false = the key was already applied, nothing happened */
@@ -140,6 +145,15 @@ interface SubjectIdentity
     public function workflowSubjectId(): string;
 }
 
+// Guard base: extend it and the "is this my workflow / my transition" filter is done.
+abstract class TransitionGuard
+{
+    final public function __invoke(object $event): void;      // register as a PSR-14 listener
+    abstract protected function workflow(): string;
+    protected function transitions(): array;                  // list<string>; [] = every transition
+    abstract protected function guard(GuardEvent $event): void;
+}
+
 final readonly class WorkflowEventDispatcher implements \Symfony\Contracts\EventDispatcher\EventDispatcherInterface
 {
     /** @param iterable<callable(object): void> $listeners internal listeners, run before the app's */
@@ -176,6 +190,16 @@ final readonly class TransitionRecord
 }
 
 final class InMemoryTransitionLog implements TransitionLog { public function all(): array; }
+
+// Dispatched to the app's PSR-14 dispatcher on every skipped replay.
+final readonly class TransitionReplayed
+{
+    public string $workflow;
+    public string $subjectId;
+    public string $transition;
+    public string $idempotencyKey;
+    public bool $storageDecided;   // false = pre-flight lookup, true = unique constraint decided a race
+}
 
 final readonly class AuditListener   // PSR-14 listener on CompletedEvent
 {
