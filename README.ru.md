@@ -12,6 +12,9 @@ Yii3: обвязка, которую в Symfony даёт FrameworkBundle, плю
 
 > Используете AI-ассистента? [llms.txt](llms.txt) — компактный API-справочник,
 > созданный для LLM.
+> Проекты с Composer-плагином [llm/skills](https://github.com/roxblnfk/skills)
+> дополнительно получают agent-скилл этого пакета в `.agents/skills/`
+> автоматически при установке.
 
 [English version](README.md)
 
