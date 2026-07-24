@@ -12,6 +12,9 @@ deliberately leaves out — a transition history and replay protection.
 
 > Using an AI coding assistant? [llms.txt](llms.txt) is a compact API reference
 > designed for LLMs.
+> Projects using the [llm/skills](https://github.com/roxblnfk/skills) Composer
+> plugin also get this package's agent skill synced into `.agents/skills/`
+> automatically on install.
 
 [Русская версия](README.ru.md)
 
