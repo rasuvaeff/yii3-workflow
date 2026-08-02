@@ -27,6 +27,8 @@ use Yiisoft\Test\Support\EventDispatcher\SimpleEventDispatcher;
 
 #[Test]
 #[Covers(IdempotentWorkflow::class)]
+#[Covers(DuplicateIdempotencyKey::class)]
+#[Covers(TransitionReplayed::class)]
 final class IdempotentWorkflowTest
 {
     private InMemoryTransitionLog $log;
