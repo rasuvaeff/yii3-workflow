@@ -37,4 +37,21 @@ final readonly class Definitions
             ],
         ];
     }
+
+    /** A cyclic state machine (Doing <-> Blocked) for stateful/model-based tests. @return array<string, mixed> */
+    public static function task(): array
+    {
+        return [
+            'type' => 'state_machine',
+            'initial' => TaskStatus::Todo,
+            'places' => TaskStatus::cases(),
+            'markingStore' => ['type' => 'enum', 'enum' => TaskStatus::class, 'property' => 'status'],
+            'transitions' => [
+                ['name' => 'start', 'from' => TaskStatus::Todo, 'to' => TaskStatus::Doing],
+                ['name' => 'block', 'from' => TaskStatus::Doing, 'to' => TaskStatus::Blocked],
+                ['name' => 'unblock', 'from' => TaskStatus::Blocked, 'to' => TaskStatus::Doing],
+                ['name' => 'finish', 'from' => TaskStatus::Doing, 'to' => TaskStatus::Done],
+            ],
+        ];
+    }
 }
