@@ -98,7 +98,7 @@ final class WorkflowFactoryTest
     {
         $definition = Definitions::order();
         $definition['type'] = 'workflow';
-        $definition['markingStore'] = new MethodMarkingStore(true, 'marking');
+        $definition['markingStore'] = new MethodMarkingStore(singleState: true, property: 'marking');
         $definition['transitions'] = [
             ['name' => 'pay', 'from' => 'pending', 'to' => 'paid'],
             ['name' => 'pay', 'from' => 'pending', 'to' => 'shipped'],
@@ -186,7 +186,7 @@ final class WorkflowFactoryTest
     {
         $definition = Definitions::order();
         $definition['type'] = 'workflow';
-        $definition['markingStore'] = new MethodMarkingStore(true, 'marking');
+        $definition['markingStore'] = new MethodMarkingStore(singleState: true, property: 'marking');
 
         $workflow = $this->factory()->create('order', $definition);
 
@@ -259,7 +259,7 @@ final class WorkflowFactoryTest
     {
         $definition = Definitions::order();
         $definition['type'] = 'workflow';
-        $definition['markingStore'] = new MethodMarkingStore(true, 'marking');
+        $definition['markingStore'] = new MethodMarkingStore(singleState: true, property: 'marking');
         $definition['transitions'] = [
             ['name' => 'pay', 'from' => 'pending', 'to' => 'paid', 'metadata' => ['label' => 'Pay']],
         ];

@@ -63,7 +63,7 @@ final readonly class WorkflowEventDispatcher implements EventDispatcherInterface
     #[\Override]
     public function dispatch(object $event, ?string $eventName = null): object
     {
-        if (!\in_array($eventName, self::FORWARDED, true)) {
+        if (!\in_array($eventName, self::FORWARDED, strict: true)) {
             return $event;
         }
 

@@ -275,7 +275,7 @@ final readonly class WorkflowFactory
         foreach (\array_keys($config) as $place) {
             // Keys are place NAMES (strings): a typo here would otherwise
             // silently produce metadata nothing ever reads.
-            if (!\is_string($place) || !\in_array($place, $places, true)) {
+            if (!\is_string($place) || !\in_array($place, $places, strict: true)) {
                 throw new \InvalidArgumentException(
                     \sprintf('Workflow "%s": placesMetadata refers to unknown place "%s"', $name, (string) $place),
                 );
@@ -347,7 +347,7 @@ final readonly class WorkflowFactory
         }
 
         if (($store['type'] ?? 'enum') === 'method') {
-            return new MethodMarkingStore(true, $property);
+            return new MethodMarkingStore(singleState: true, property: $property);
         }
 
         $enum = $store['enum'] ?? null;

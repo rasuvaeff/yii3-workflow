@@ -115,7 +115,7 @@ final class TransitionGuardTest
             protected function guard(GuardEvent $event): void
             {
                 ++$this->calls;
-                $event->setBlocked(true);
+                $event->setBlocked(blocked: true);
             }
         };
     }
