@@ -49,7 +49,7 @@ abstract class TransitionGuard
 
         $transitions = $this->transitions();
 
-        if ($transitions !== [] && !\in_array($event->getTransition()->getName(), $transitions, true)) {
+        if ($transitions !== [] && !\in_array($event->getTransition()->getName(), $transitions, strict: true)) {
             return;
         }
 
