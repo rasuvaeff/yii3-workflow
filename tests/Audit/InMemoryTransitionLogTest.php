@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Rasuvaeff\Yii3Workflow\Tests\Audit;
 
+use Rasuvaeff\Yii3Workflow\Audit\DuplicateIdempotencyKey;
 use Rasuvaeff\Yii3Workflow\Audit\InMemoryTransitionLog;
 use Rasuvaeff\Yii3Workflow\Audit\TransitionLog;
 use Rasuvaeff\Yii3Workflow\Audit\TransitionRecord;
 use Testo\Assert;
 use Testo\Codecov\Covers;
+use Testo\Expect;
 use Testo\Test;
 
 #[Test]
@@ -52,6 +54,16 @@ final class InMemoryTransitionLogTest
         Assert::false($log->hasIdempotencyKey('order', 'o-2', 'req-1'));
         Assert::false($log->hasIdempotencyKey('invoice', 'o-1', 'req-1'));
         Assert::false($log->hasIdempotencyKey('order', 'o-1', 'req-2'));
+    }
+
+    public function refusesASecondRecordWithTheSameKeyForTheSameSubject(): void
+    {
+        $log = new InMemoryTransitionLog();
+        $log->append($this->record('order', 'o-1', 'pay', 'req-1'));
+
+        Expect::exception(DuplicateIdempotencyKey::class);
+
+        $log->append($this->record('order', 'o-1', 'ship', 'req-1'));
     }
 
     public function ignoresRecordsWithoutAKey(): void
