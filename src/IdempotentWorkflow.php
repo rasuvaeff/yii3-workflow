@@ -83,11 +83,9 @@ final readonly class IdempotentWorkflow
         }
 
         if ($this->idempotency === null) {
-            throw new \LogicException(
-                'An idempotency key was supplied but no IdempotencyContext is bound, so the key could '
+            throw new \LogicException('An idempotency key was supplied but no IdempotencyContext is bound, so the key could '
                 . 'never reach the transition log. Build the workflow via WorkflowFactory, or pass the '
-                . 'same IdempotencyContext instance the AuditListener uses.',
-            );
+                . 'same IdempotencyContext instance the AuditListener uses.');
         }
 
         if (!$subject instanceof SubjectIdentity) {
@@ -119,11 +117,9 @@ final readonly class IdempotentWorkflow
         }
 
         if (!$this->log->hasIdempotencyKey($this->name(), $subject->workflowSubjectId(), $idempotencyKey)) {
-            throw new \LogicException(
-                'The transition completed but its idempotency key was never recorded: no AuditListener '
+            throw new \LogicException('The transition completed but its idempotency key was never recorded: no AuditListener '
                 . 'sharing this TransitionLog and IdempotencyContext is attached to the workflow. Build '
-                . 'the workflow via WorkflowFactory so the wiring is consistent.',
-            );
+                . 'the workflow via WorkflowFactory so the wiring is consistent.');
         }
 
         return true;

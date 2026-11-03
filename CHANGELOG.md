@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+- Mutation testing now counts code that tests execute but do not name in `#[Covers]` (`infection --with-uncovered`); overall MSI stays 100%. Added a duplicate-key test for `InMemoryTransitionLog` and full-message assertions for the two `IdempotentWorkflow` wiring errors. The two `LogicException` calls in `IdempotentWorkflow::applyOnce()` were re-wrapped so the message starts on the `throw` line (no behaviour change; the continuation lines have no opcode, so their mutants could never be covered).
+
 ## 1.1.0 — 2026-07-25
 
 - Ship an AI agent skill (`resources/skills/rasuvaeff-yii3-workflow/SKILL.md` +

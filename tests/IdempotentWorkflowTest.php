@@ -137,7 +137,7 @@ final class IdempotentWorkflowTest
         $workflow = new IdempotentWorkflow($this->workflow->workflow(), new InMemoryTransitionLog());
 
         Expect::exception(\LogicException::class)
-            ->withMessageContaining('pass the same IdempotencyContext instance the AuditListener uses');
+            ->withMessageContaining('so the key could never reach the transition log. Build the workflow via WorkflowFactory, or pass the same IdempotencyContext instance the AuditListener uses');
 
         $workflow->applyOnce(new Order(), 'pay', 'req-1');
     }
@@ -155,7 +155,7 @@ final class IdempotentWorkflowTest
         );
 
         Expect::exception(\LogicException::class)
-            ->withMessageContaining('Build the workflow via WorkflowFactory so the wiring is consistent');
+            ->withMessageContaining('no AuditListener sharing this TransitionLog and IdempotencyContext is attached to the workflow. Build the workflow via WorkflowFactory so the wiring is consistent');
 
         $workflow->applyOnce(new Order(), 'pay', 'req-1');
     }
