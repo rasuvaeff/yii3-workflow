@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 - Mutation testing now counts code that tests execute but do not name in `#[Covers]` (`infection --with-uncovered`); overall MSI stays 100%. Added a duplicate-key test for `InMemoryTransitionLog` and full-message assertions for the two `IdempotentWorkflow` wiring errors. The two `LogicException` calls in `IdempotentWorkflow::applyOnce()` were re-wrapped so the message starts on the `throw` line (no behaviour change; the continuation lines have no opcode, so their mutants could never be covered).
+- **Changed:** PHP 8.6 is supported: the `php` constraint is widened to
+  `8.3 - 8.6` (#14). CI runs PHP 8.6 as a regular matrix entry; the
+  backward-compatibility job runs on PHP 8.5.
 
 ## 1.1.0 — 2026-07-25
 

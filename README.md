@@ -43,7 +43,7 @@ deliberately leaves out — a transition history and replay protection.
 
 ## Requirements
 
-- PHP 8.3 / 8.4 / 8.5
+- PHP 8.3 / 8.4 / 8.5 / 8.6
 - `symfony/workflow` ^6.4 / ^7.0 / ^8.0
 - `psr/clock`, `psr/event-dispatcher`, `symfony/event-dispatcher-contracts`
 - `symfony/console` (for the dump command), `yiisoft/definitions`
