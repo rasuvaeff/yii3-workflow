@@ -43,7 +43,7 @@ Yii3: обвязка, которую в Symfony даёт FrameworkBundle, плю
 
 ## Требования
 
-- PHP 8.3 / 8.4 / 8.5
+- PHP 8.3 / 8.4 / 8.5 / 8.6
 - `symfony/workflow` ^6.4 / ^7.0 / ^8.0
 - `psr/clock`, `psr/event-dispatcher`, `symfony/event-dispatcher-contracts`
 - `symfony/console` (для команды дампа), `yiisoft/definitions`
