@@ -120,7 +120,7 @@ Or with Make: `make build`, `make cs-fix`, `make psalm`, `make test`,
   `tests/Support/Clocks`) and `SimpleEventDispatcher`. Do not hand-roll PSR
   doubles here — `SimpleEventDispatcher::isInstanceOfTriggered($class, $times)`
   is also what proves the bridge delivers one event per check.
-- `rector.php` skips `FlipTypeControlToUseExclusiveTypeRector`: it rewrites
+- `rector.php` skips `ExplicitNullableObjectInstanceRector`: it rewrites
   `=== null` into `!$x instanceof Vendor\Fqcn`. Keep null checks as `=== null`.
 - `infection.json5` gates at MSI 100 with a few documented per-method `ignore`
   entries for provably equivalent mutants (enum casts, marking count,
