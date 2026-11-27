@@ -73,7 +73,7 @@ final class ConfigWiringTest
 
     public function paramsRegisterTheDumpCommand(): void
     {
-        $params = require \dirname(__DIR__) . '/config/params.php';
+        $params = require __DIR__ . '/../config/params.php';
 
         Assert::same($params['yiisoft/yii-console']['commands']['workflow:dump'], WorkflowDumpCommand::class);
         Assert::same($params['rasuvaeff/yii3-workflow']['workflows'], []);
@@ -96,7 +96,7 @@ final class ConfigWiringTest
      */
     private function diRaw(array $params): array
     {
-        return (static fn(array $params): array => require \dirname(__DIR__) . '/config/di.php')($params);
+        return (static fn(array $params): array => require __DIR__ . '/../config/di.php')($params);
     }
 
     /** @param array<string, mixed> $definitions */
